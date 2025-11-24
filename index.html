@@ -3,320 +3,266 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>2ch風 スレッド＋画像掲示板（Supabase + Cloudflare Pages）</title>
+  <title>2ch風 掲示板（板機能対応 完全版）</title>
+
+  <!-- ================= CSS（2000年代2ch風グリーン） ================= -->
   <style>
-    /* 2000年代の2ch風グリーンデザイン */
-    :root{
-      --bg:#001f00; /* 深緑バック */
-      --panel:#042b01; /* パネル */
-      --text:#dfffe0; /* 明るい緑 */
+    :root {
+      --bg:#001f00;
+      --panel:#042b01;
+      --text:#dfffe0;
       --muted:#9fd19f;
-      --accent:#00ff66; /* ネオン・グリーン */
-      --border:#0a5b12
+      --accent:#00ff66;
+      --border:#0a5b12;
     }
-    *{box-sizing:border-box}
-    html,body{height:100%;margin:0;background:linear-gradient(#001200, var(--bg));font-family: 'MS PGothic', 'Helvetica Neue', Arial, sans-serif;color:var(--text)}
-    .wrap{max-width:980px;margin:18px auto;padding:12px}
+    *{ box-sizing:border-box; }
+    body {
+      margin:0;
+      background:var(--bg);
+      color:var(--text);
+      font-family:"MS PGothic",sans-serif;
+    }
+    .wrap { max-width:1000px; margin:auto; padding:12px; }
 
-    header{display:flex;align-items:center;gap:12px;margin-bottom:12px}
-    .logo{font-weight:700;font-size:1.25rem;color:var(--accent);text-shadow:0 0 6px rgba(0,255,102,0.15)}
-    .sub{color:var(--muted);font-size:0.9rem}
+    header {
+      display:flex; justify-content:space-between; align-items:center;
+      margin-bottom:12px;
+    }
+    .logo {
+      font-size:20px; font-weight:700; color:var(--accent);
+    }
+    .board-select {
+      background:#003000;
+      padding:4px 8px;
+      border:1px solid var(--border);
+      color:var(--text);
+      border-radius:6px;
+    }
 
-    /* レイアウト */
-    .grid{display:grid;grid-template-columns:320px 1fr;gap:14px}
-    @media(max-width:900px){.grid{grid-template-columns:1fr}}
+    .grid {
+      display:grid;
+      grid-template-columns:300px 1fr;
+      gap:16px;
+    }
+    @media(max-width:900px){
+      .grid { grid-template-columns:1fr; }
+    }
 
-    .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.04));padding:12px;border-radius:6px;border:1px solid var(--border)}
-    form{display:flex;flex-direction:column;gap:8px}
+    .card {
+      background:#021902;
+      padding:12px;
+      border:1px solid var(--border);
+      border-radius:6px;
+    }
 
-    label{font-size:12px;color:var(--muted)}
-    input[type=text], textarea, input[type=file], select{background:transparent;border:1px solid rgba(255,255,255,0.06);padding:6px;border-radius:6px;color:var(--text)}
-    textarea{min-height:80px}
+    input, textarea, select {
+      background:#0000;
+      border:1px solid #114411;
+      color:var(--text);
+      padding:6px;
+      border-radius:4px;
+      width:100%;
+    }
+    textarea { min-height:70px; }
 
-    .btn{background:var(--accent);border:none;padding:8px 10px;border-radius:4px;color:#002200;cursor:pointer;font-weight:700}
-    .btn.secondary{background:#113311;color:var(--text);border:1px solid #114411}
+    .btn {
+      background:var(--accent);
+      padding:6px 10px;
+      border:none;
+      border-radius:4px;
+      color:#002200;
+      cursor:pointer;
+      font-weight:700;
+      margin-top:6px;
+    }
+    .btn.sec {
+      background:#113311;
+      color:var(--text);
+      border:1px solid #114411;
+    }
 
-    /* スレッド一覧（2ch風） */
-    .threads{display:flex;flex-direction:column;gap:10px}
-    .thread{background:linear-gradient(90deg, rgba(0,0,0,0.06), rgba(255,255,255,0.01));padding:8px;border:1px solid #07360b;border-radius:4px}
-    .thread .hdr{display:flex;justify-content:space-between;align-items:center}
-    .thread .title{font-weight:700;color:var(--accent)}
-    .meta{font-size:12px;color:var(--muted)}
-
-    .post{margin-top:8px;padding:8px;background:#021901;border-radius:4px;border:1px solid #0a3f10}
-    .post .author{font-weight:700;color:var(--accent);font-size:13px}
-    .post .time{font-size:11px;color:var(--muted)}
-    .post .body{white-space:pre-wrap;margin-top:6px}
-
-    .images{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
-    .images img{max-width:120px;max-height:120px;border:2px solid #052e09;border-radius:4px;object-fit:cover}
-
-    .reply-area{margin-top:8px;padding-top:8px;border-top:1px dashed #064010}
-    .small{font-size:12px;color:var(--muted)}
-
-    /* レトロ感演出 */
-    .monospace{font-family: 'Courier New', Courier, monospace;font-size:13px}
-
+    .threads { display:flex; flex-direction:column; gap:10px; }
+    .thread {
+      background:#041d04;
+      border:1px solid #07360b;
+      padding:10px;
+      border-radius:4px;
+    }
+    .post {
+      margin-top:6px;
+      background:#021401;
+      padding:8px;
+      border:1px solid #0a3f10;
+      border-radius:4px;
+    }
+    .images img {
+      max-width:120px;
+      border:2px solid #052e09;
+      border-radius:4px;
+      margin:4px;
+    }
   </style>
 </head>
 <body>
   <div class="wrap">
+
+    <!-- ================= ヘッダー ================= -->
     <header>
-      <div class="logo">2ch風 掲示板</div>
-      <div class="sub">Supabase + Cloudflare Pages で動く雛形。緑基調・返信機能あり。</div>
+      <div class="logo">2ch風 掲示板（板機能 完全版）</div>
+
+      <!-- 表示する板を切り替え -->
+      <select id="board" class="board-select">
+        <option value="global">グローバル</option>
+        <option value="help">ヘルプ</option>
+      </select>
     </header>
 
     <div class="grid">
-      <!-- サイド：スレッド作成 -->
+
+      <!-- ================= スレ作成 ================= -->
       <aside class="card">
         <form id="create-thread">
           <label>スレッドタイトル</label>
-          <input id="thread-title" type="text" placeholder="例：旅行スレッド" required />
+          <input id="title" required>
 
-          <label>投稿者名</label>
-          <input id="thread-author" type="text" placeholder="名無し" />
+          <label>投稿者</label>
+          <input id="author" placeholder="名無し">
 
-          <label>本文（最初の投稿）</label>
-          <textarea id="thread-body" placeholder="最初のレスを書いてください（省略可）"></textarea>
+          <label>本文</label>
+          <textarea id="body"></textarea>
 
-          <label>画像（複数可）</label>
-          <input id="thread-images" type="file" accept="image/*" multiple />
+          <label>画像</label>
+          <input id="images" type="file" accept="image/*" multiple>
 
-          <div style="display:flex;gap:8px;margin-top:8px">
-            <button class="btn" type="submit">スレッド作成</button>
-            <button id="refresh" type="button" class="btn secondary">更新</button>
-          </div>
+          <label>板</label>
+          <select id="thread-board">
+            <option value="global">グローバル</option>
+            <option value="help">ヘルプ</option>
+          </select>
+
+          <button class="btn" type="submit">作成</button>
+          <button id="refresh" type="button" class="btn sec">更新</button>
         </form>
-
-        <hr style="border:none;border-top:1px solid #07360b;margin:10px 0">
-        <div class="small">注意: この雛形は公開anonキーとpublicバケットで動きます。公開前に認証／RLSの追加を検討してください。</div>
       </aside>
 
-      <!-- メイン：スレッド一覧と返信 -->
+      <!-- ================= スレ一覧 ================= -->
       <main>
-        <div class="card" style="margin-bottom:12px">
-          <div style="display:flex;justify-content:space-between;align-items:center">
-            <div class="small">スレッド一覧（最新順）</div>
-            <div class="small monospace">Supabase Storage に画像置く / Cloudflare Pages 配置推奨</div>
-          </div>
-        </div>
-
         <div id="threads" class="threads"></div>
       </main>
+
     </div>
   </div>
 
-  <!-- Supabase SDK -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/supabase.min.js"></script>
+  <!-- ================= Supabase SDK ================= -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <!-- ================= JS ================= -->
   <script>
-    // ===== 設定（デプロイ前に置き換えてください） =====
-    const SUPABASE_URL = 'https://your-supabase-project.supabase.co' // ← 置き換え
-    const SUPABASE_ANON_KEY = 'public-anon-key' // ← 置き換え
-    const IMAGE_BUCKET = 'thread-images' // Storage bucket 名
+    /* ====== Supabase 設定（差し替えてください） ====== */
+    const SUPABASE_URL  = "https://your-project.supabase.co";
+    const SUPABASE_ANON = "your-anon-key";
+    const BUCKET = "thread-images";
 
-    // 初期化
-    const supabase = supabaseJs.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
-    const $ = id => document.getElementById(id)
+    const supabase = supabaseJs.createClient(SUPABASE_URL, SUPABASE_ANON);
+    const $ = id => document.getElementById(id);
 
-    // --- ユーティリティ ---
-    function escapeHtml(s){ return (s||'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;') }
-    function fmtTime(ts){ try { return new Date(ts).toLocaleString() } catch(e){ return ts }}
+    /* ================= スレ一覧読み込み ================= */
+    async function loadThreads() {
+      const board = $('board').value;
 
-    // --- スレッド作成 ---
-    document.getElementById('create-thread').addEventListener('submit', async (e) =>{
-      e.preventDefault()
-      const title = $('thread-title').value.trim()
-      const author = $('thread-author').value.trim() || '名無し'
-      const body = $('thread-body').value.trim()
-      const files = $('thread-images').files
-      if (!title) return alert('タイトルを入れてください')
-
-      // threads テーブルに行を作る
-      const { data: thread, error: threadErr } = await supabase
+      const { data, error } = await supabase
         .from('threads')
-        .insert([{ title, author, body }])
-        .select()
-        .single()
+        .select('*, posts(*), images(*)')
+        .eq('board', board)
+        .order('created_at', { ascending: false });
 
-      if (threadErr){ console.error(threadErr); alert('スレッド作成失敗'); return }
+      const box = $('threads');
+      box.innerHTML = "";
 
-      // 最初の投稿を posts テーブルへ
-      if (body){
-        await supabase.from('posts').insert([{ thread_id: thread.id, author, body }])
-      }
+      if (!data) return;
 
-      // 画像アップロード（Storage に入れて images テーブルに記録）
-      if (files.length){
-        for (const file of files){
-          const ext = (file.name.split('.').pop() || 'jpg')
-          const filename = `thread_${thread.id}/${crypto.randomUUID()}.${ext}`
-          const { error: upErr } = await supabase.storage.from(IMAGE_BUCKET).upload(filename, file)
-          if (upErr){ console.error(upErr); continue }
-          const publicUrl = supabase.storage.from(IMAGE_BUCKET).getPublicUrl(filename).publicUrl
-          await supabase.from('images').insert([{ thread_id: thread.id, url: publicUrl, name: filename }])
-        }
-      }
+      data.forEach(t => {
+        const el = document.createElement('div');
+        el.className = 'thread';
+        el.innerHTML = `<b>${t.title}</b> / ${t.author || '名無し'} / [${t.board}]`;
 
-      // フォームリセットと再読み込み
-      $('thread-title').value=''; $('thread-body').value=''; $('thread-images').value=null
-      loadThreads()
-    })
+        /* ---- レス ---- */
+        (t.posts || [])
+          .sort((a,b) => new Date(a.created_at) - new Date(b.created_at))
+          .forEach(p => {
+            const pEl = document.createElement('div');
+            pEl.className = 'post';
+            pEl.innerHTML = `<b>${p.author || '名無し'}</b><br>${p.body}`;
+            el.appendChild(pEl);
+          });
 
-    // 更新ボタン
-    $('refresh').addEventListener('click', loadThreads)
+        /* ---- 画像 ---- */
+        if (t.images && t.images.length) {
+          const imgs = document.createElement('div');
+          imgs.className = 'images';
 
-    // --- スレッド一覧読み込み（スレッド + 最新数レスを取得） ---
-    async function loadThreads(){
-      // threads を取得
-      const { data: threads, error } = await supabase
-        .from('threads')
-        .select('*, images:images(name,url), posts:posts(id,author,body,created_at)')
-        .order('created_at', { ascending: false })
+          t.images.forEach(im => {
+            const i = document.createElement('img');
+            i.src = im.url;
+            imgs.appendChild(i);
+          });
 
-      if (error){ console.error(error); return }
-      const container = $('threads')
-      container.innerHTML = ''
-
-      for (const t of threads){
-        const el = document.createElement('div')
-        el.className = 'thread'
-
-        // ヘッダ
-        const hdr = document.createElement('div'); hdr.className='hdr'
-        hdr.innerHTML = `<div class="title">${escapeHtml(t.title)}</div><div class="meta">#${t.id} ・ ${fmtTime(t.created_at)}</div>`
-        el.appendChild(hdr)
-
-        // latest posts（レスは posts テーブルに入っている）
-        if (t.posts && t.posts.length){
-          // sort by created_at asc
-          t.posts.sort((a,b)=> new Date(a.created_at) - new Date(b.created_at))
-          for (const p of t.posts){
-            const post = document.createElement('div'); post.className='post'
-            post.innerHTML = `<div style=\"display:flex;justify-content:space-between;align-items:center\"><div class=\"author\">${escapeHtml(p.author||'名無し')}</div><div class=\"time\">${fmtTime(p.created_at)}</div></div><div class=\"body\">${escapeHtml(p.body||'')}</div>`
-            el.appendChild(post)
-          }
+          el.appendChild(imgs);
         }
 
-        // スレッドに紐づく画像
-        if (t.images && t.images.length){
-          const imgs = document.createElement('div'); imgs.className='images'
-          for (const img of t.images){
-            const i = document.createElement('img'); i.src = img.url; i.alt = img.name || 'image'
-            imgs.appendChild(i)
-          }
-          el.appendChild(imgs)
-        }
-
-        // 返信フォーム
-        const reply = document.createElement('div'); reply.className='reply-area'
-        reply.innerHTML = `
-          <form data-thread-id="${t.id}" class="reply-form">
-            <label class="small">名前</label>
-            <input name="author" type="text" placeholder="名無し" />
-            <label class="small">本文</label>
-            <textarea name="body" placeholder="レスを書く"></textarea>
-            <label class="small">画像（任意）</label>
-            <input name="image" type="file" accept="image/*" />
-            <div style=\"display:flex;gap:8px;margin-top:8px\"><button class=\"btn\" type=\"submit\">書き込む</button><button type=\"button\" class=\"btn secondary\">引用</button></div>
-          </form>
-        `
-        el.appendChild(reply)
-
-        container.appendChild(el)
-      }
-
-      // 返信フォームのイベントを一括で登録
-      document.querySelectorAll('.reply-form').forEach(form => {
-        form.addEventListener('submit', async (e)=>{
-          e.preventDefault()
-          const threadId = form.dataset.threadId
-          const author = form.author.value.trim() || '名無し'
-          const body = form.body.value.trim()
-          const file = form.image.files[0]
-
-          // posts テーブルに追加
-          const { error: postErr } = await supabase.from('posts').insert([{ thread_id: threadId, author, body }])
-          if (postErr){ console.error(postErr); alert('投稿失敗'); return }
-
-          // 画像があれば upload
-          if (file){
-            const ext = (file.name.split('.').pop() || 'jpg')
-            const filename = `thread_${threadId}/${crypto.randomUUID()}.${ext}`
-            const { error: upErr } = await supabase.storage.from(IMAGE_BUCKET).upload(filename, file)
-            if (!upErr){
-              const publicUrl = supabase.storage.from(IMAGE_BUCKET).getPublicUrl(filename).publicUrl
-              await supabase.from('images').insert([{ thread_id: threadId, url: publicUrl, name: filename }])
-            } else console.error(upErr)
-          }
-
-          form.author.value=''; form.body.value=''; form.image.value=null
-          loadThreads()
-        })
-      })
+        box.appendChild(el);
+      });
     }
 
-    // 初期ロード
-    loadThreads()
+    $('board').addEventListener('change', loadThreads);
 
+    /* ================= スレ作成 ================= */
+    $('create-thread').addEventListener('submit', async e => {
+      e.preventDefault();
+
+      const title = $('title').value;
+      const author = $('author').value || "名無し";
+      const body = $('body').value;
+      const board = $('thread-board').value;
+      const files = $('images').files;
+
+      /* --- threads に追加 --- */
+      const { data: thread } = await supabase
+        .from('threads')
+        .insert([{ title, author, body, board }])
+        .select()
+        .single();
+
+      /* --- 最初の投稿（本文） --- */
+      if (body) {
+        await supabase.from('posts').insert([
+          { thread_id: thread.id, author, body }
+        ]);
+      }
+
+      /* --- 画像アップロード --- */
+      for (const f of files) {
+        const name = `t_${thread.id}_${crypto.randomUUID()}`;
+        await supabase.storage.from(BUCKET).upload(name, f);
+        const url = supabase.storage.from(BUCKET).getPublicUrl(name).publicUrl;
+
+        await supabase.from('images').insert([
+          { thread_id: thread.id, name, url }
+        ]);
+      }
+
+      $('title').value = "";
+      $('body').value = "";
+      $('images').value = null;
+
+      loadThreads();
+    });
+
+    $('refresh').addEventListener('click', loadThreads);
+
+    /* 初期表示 */
+    loadThreads();
   </script>
 
-  <!-- README: Supabase スキーマ & Cloudflare Pages デプロイ手順 -->
-  <!--
-    1) Supabase 側
-      - プロジェクト作成
-      - Storage バケット作成: 名前 = "thread-images"（Public にするか signed URL を使う）
-      - SQL を Supabase SQL エディタで実行する
-
-    -- SQL スキーマ（コピーして実行）
-    create table if not exists public.threads (
-      id bigint generated by default as identity primary key,
-      title text not null,
-      author text,
-      body text,
-      created_at timestamptz default now()
-    );
-
-    create table if not exists public.posts (
-      id bigint generated by default as identity primary key,
-      thread_id bigint references public.threads(id) on delete cascade,
-      author text,
-      body text,
-      created_at timestamptz default now()
-    );
-
-    create table if not exists public.images (
-      id bigint generated by default as identity primary key,
-      thread_id bigint references public.threads(id) on delete cascade,
-      name text,
-      url text,
-      created_at timestamptz default now()
-    );
-
-    -- 簡易権限（開発用。公開キーでINSERTを有効にします）
-    grant select, insert on public.threads to anon;
-    grant select, insert on public.posts to anon;
-    grant select, insert on public.images to anon;
-
-    重要: 本番では RLS（Row Level Security）や認証を設定してください。
-
-    2) Cloudflare Pages にデプロイ（推奨）
-      - GitHub にこの index.html を push
-      - Cloudflare Pages で新しいプロジェクトを作成 -> GitHub リポジトリを接続
-      - ビルド設定: ビルドコマンドは不要（静的）、ビルド出力ディレクトリはルート
-      - 環境変数に SUPABASE_URL と SUPABASE_ANON_KEY を設定しておく（index.html に埋め込む場合はビルド時に置換）
-
-    3) Cloudflare Workers を使って画像検査を挟む案（任意）
-      - 画像のMIMEチェックやウイルススキャンを入れたい場合、ファイルは一旦 Worker に送って検査し
-        問題なければ Supabase の service_role キーでアップロードするフローにする
-
-    4) 改善案
-      - 認証を入れてユーザー管理／BAN管理
-      - RLS と service_role を組み合わせた安全なアップロード
-      - 画像のサムネイル生成（Edgeで先に縮小）
-
-    5) 環境変数の取り扱い
-      - フロントで使う anon key は公開キーなので安全性の観点からは制限あり
-      - サーバーサイド（Worker）を使うなら service_role を使って安全に操作できます
-  -->
 </body>
 </html>
