@@ -1,389 +1,159 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>2ch風 掲示板（本番向け雛形）</title>
-
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>2ch風掲示板（認証 + RLS + 画像検査ワーカー構成）</title>
 <style>
-  :root{
-    --bg:#001f00;
-    --panel:#042b01;
-    --text:#dfffe0;
-    --muted:#9fd19f;
-    --accent:#00ff66;
-    --border:#0a5b12;
-    --max-width:1100px;
-  }
-  *{box-sizing:border-box}
-  html,body{height:100%;margin:0;background:linear-gradient(#001200,var(--bg));color:var(--text);font-family:system-ui,'Hiragino Kaku Gothic ProN','Noto Sans JP',sans-serif}
-  .wrap{max-width:var(--max-width);margin:14px auto;padding:12px}
-  header{display:flex;gap:10px;align-items:center;justify-content:space-between;margin-bottom:12px}
-  .brand{font-weight:800;color:var(--accent);font-size:18px}
-  .controls{display:flex;gap:8px;align-items:center}
-  select, input[type=text] { background:transparent;border:1px solid #114411;padding:6px;border-radius:6px;color:var(--text)}
-  button{background:var(--accent);color:#002200;border:none;padding:8px 10px;border-radius:6px;font-weight:700;cursor:pointer}
-  button.secondary{background:#113311;color:var(--text);border:1px solid #114411}
-  .grid{display:grid;grid-template-columns:320px 1fr;gap:14px}
-  @media(max-width:920px){.grid{grid-template-columns:1fr}}
-  .card{background:#021902;padding:12px;border-radius:8px;border:1px solid var(--border)}
-  form{display:flex;flex-direction:column;gap:8px}
-  label.small{font-size:12px;color:var(--muted)}
-  input,textarea{width:100%}
-  textarea{min-height:84px;padding:8px;border-radius:6px}
-  .threads{display:flex;flex-direction:column;gap:10px}
-  .thread{background:#041d04;border:1px solid #07360b;padding:10px;border-radius:6px;display:flex;flex-direction:column}
-  .thread-header{display:flex;justify-content:space-between;align-items:center;gap:8px}
-  .thread-title{font-weight:800;color:var(--accent);font-size:15px}
-  .meta{font-size:12px;color:var(--muted)}
-  .post{margin-top:8px;background:#021401;padding:8px;border-radius:6px;border:1px solid #0a3f10}
-  .post .meta{font-size:12px;color:#9fd19f;margin-bottom:6px}
-  .images{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
-  .images img{max-width:120px;max-height:120px;border-radius:6px;border:2px solid #052e09;object-fit:cover}
-  .reply-box{margin-top:10px;padding:8px;border-radius:6px;background:#001900;border:1px dashed #0a5b12}
-  .thread-stats{font-size:12px;color:var(--muted)}
-  .small-muted{font-size:12px;color:var(--muted)}
-  /* スマホ最適化：大きめボタン/画像フレンドリー */
-  @media(max-width:520px){
-    .brand{font-size:16px}
-    button{padding:12px;border-radius:8px}
-    .images img{max-width:44vw;max-height:44vw}
-    .grid{gap:10px}
-  }
+ body { font-family: sans-serif; background:#eef2e2; margin:0; padding:0; }
+ header { background:#2f4f2f; color:white; padding:10px; text-align:center; }
+ .board-list, .thread-list, .post-list { max-width:800px; margin:20px auto; padding:15px; background:white; border-radius:10px; }
+ .tabbar { position:fixed; bottom:0; left:0; right:0; background:#2f4f2f; color:white; display:flex; justify-content:space-around; padding:10px; }
+ .tabbar button { background:none; border:none; color:white; font-size:16px; }
+ .card { margin-top:20px; padding:10px; background:#f8fff0; border-radius:6px; }
+ .post-img { max-width:100%; border:1px solid #ccc; margin-top:5px; }
+ textarea, input { width:100%; padding:8px; margin:5px 0; }
+ button { padding:10px 15px; background:#2f4f2f; color:white; border:none; border-radius:6px; }
 </style>
 </head>
 <body>
-<div class="wrap" id="indexPage">
-  <header>
-    <div class="brand">2ch風 掲示板 — 本番雛形</div>
-    <div class="controls">
-      <select id="boardSelect"></select>
-      <input id="newBoardName" type="text" placeholder="板追加名 (例: 雑談)" style="min-width:140px" />
-      <button id="addBoardBtn" class="secondary">板を追加</button>
-      <button id="refreshBtn">更新</button>
-    </div>
-  </header>
-
-  <div class="grid">
-    <!-- サイド：スレ立て -->
-    <aside class="card">
-      <h3>スレッド新規作成</h3>
-      <form id="createThreadForm">
-        <label class="small">タイトル</label>
-        <input id="threadTitle" type="text" required />
-        <label class="small">投稿者</label>
-        <input id="threadAuthor" type="text" placeholder="名無し" />
-        <label class="small">本文（任意）</label>
-        <textarea id="threadBody"></textarea>
-        <label class="small">画像（任意）</label>
-        <input id="threadImages" type="file" accept="image/*" multiple />
-        <label class="small">板</label>
-        <select id="threadBoard"></select>
-
-        <div style="display:flex;gap:8px">
-          <button type="submit">スレ作成</button>
-          <button id="clearForm" type="button" class="secondary">クリア</button>
-        </div>
-      </form>
-    </aside>
-
-    <!-- メイン：スレ一覧 -->
-    <main>
-      <div id="threadsList" class="threads"></div>
-    </main>
-  </div>
+<header><h2>2ch風掲示板</h2></header>
+<div id="app">
+  <div class="board-list" id="board-list"></div>
+  <div class="thread-list" id="thread-list" style="display:none"></div>
+  <div class="post-list" id="post-list" style="display:none"></div>
 </div>
-
-<!-- スレ個別ページ -->
-<div class="wrap" id="threadPage" style="display:none">
-  <a href="#" id="backToIndex" class="small-muted">&larr; 板一覧へ</a>
-  <div id="threadView" class="card" style="margin-top:8px"></div>
-
-  <div class="card" style="margin-top:12px">
-    <h3>レスを投稿</h3>
-    <form id="createPostForm">
-      <label class="small">名前</label>
-      <input id="postAuthor" placeholder="名無し" />
-      <label class="small">本文</label>
-      <textarea id="postBody" required></textarea>
-      <label class="small">画像（任意・自動圧縮）</label>
-      <input id="postImage" type="file" accept="image/*" />
-      <div style="display:flex;gap:8px">
-        <button type="submit">書き込む</button>
-        <button id="backBtn" type="button" class="secondary">一覧へ戻る</button>
-      </div>
-    </form>
-  </div>
+<div class="tabbar">
+  <button onclick="showBoards()">板</button>
+  <button onclick="showThreads()">スレ</button>
+  <button onclick="scrollToBottom()">↓</button>
 </div>
-
-<!-- supabase SDK -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-/* =================== 設定: ここを置き換えてください =================== */
-const SUPABASE_URL = 'https://spjepboucvocedgoxzwg.supabase.co'     // ← あなたの Supabase URL
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNwamVwYm91Y3ZvY2VkZ294endnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM5OTMwMDEsImV4cCI6MjA3OTU2OTAwMX0.nmDF_BRiaXxTV2ij2ak4Fg24iCfHkvAbL7zNDbKCKWU'                 // ← あなたの anon key (開発用)
-/* ==================================================================== */
+// Supabase
+const supabase = window.supabase.createClient("https://spjepboucvocedgoxzwg.supabase.co", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNwamVwYm91Y3ZvY2VkZ294endnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM5OTMwMDEsImV4cCI6MjA3OTU2OTAwMX0.nmDF_BRiaXxTV2ij2ak4Fg24iCfHkvAbL7zNDbKCKWU");
 
-const BUCKET = 'thread-images'
-const supabase = supabaseJs.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
-const $ = id => document.getElementById(id)
-
-/* ---------- 設計（DBテーブル） ----------
-threads: id PK, title, author, board, created_at, last_post_at
-posts: id PK, thread_id FK, author, body, image_url, created_at
-images: id PK, thread_id FK, name, url, created_at
-boards: id PK, key (text), label (text)
---------------------------------------- */
-
-/* ---------- ユーティリティ ---------- */
-function fmt(dt){
-  try{ return new Date(dt).toLocaleString() }catch(e){ return dt }
-}
-function safe(s){ return (s||'').toString().replaceAll('<','&lt;').replaceAll('>','&gt;') }
-
-/* ---------- 画像圧縮（ブラウザ側） ----------
- - 対応形式: jpeg/png/webp
- - 最大サイズ（長辺）: 1200px
- - 出力品質: 0.65 (多少荒れるが帯域節約)
- - 戻り値: Promise<Blob>
---------------------------------------- */
-async function compressImageFile(file, maxSide = 1200, quality = 0.65){
-  if (!file) return null
-  if (!file.type.startsWith('image/')) throw new Error('画像ファイルではありません')
-  const img = await createImageBitmap(file)
-  const ratio = Math.min(1, maxSide / Math.max(img.width, img.height))
-  const canvas = document.createElement('canvas')
-  canvas.width = Math.round(img.width * ratio)
-  canvas.height = Math.round(img.height * ratio)
-  const ctx = canvas.getContext('2d')
-  // 簡易ノイズ対策、縮小は自動でアンチエイリアスされる
-  ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-  // prefer webp/jpg for smaller size
-  const mime = file.type === 'image/png' ? 'image/jpeg' : 'image/webp'
-  return await new Promise(resolve => canvas.toBlob(resolve, mime, quality))
+// XSS 防止
+function clean(text){
+  return text.replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
 }
 
-/* ---------- セーフティ（クライアント側） ---------- */
-const ALLOWED_TYPES = ['image/jpeg','image/png','image/webp']
-const MAX_FILE_BYTES = 6 * 1024 * 1024 // 6MB（圧縮後もチェック）
-function isSafeFileType(file){
-  return ALLOWED_TYPES.includes(file.type)
-}
+// UI 切替
+type = { boards: 'boards', threads:'threads', posts:'posts' }
+let currentBoard = null;
+let currentThread = null;
 
-/* ---------- Boards（板） ---------- */
-async function ensureDefaultBoards(){
-  const { data } = await supabase.from('boards').select().limit(1)
-  if (!data || data.length === 0){
-    await supabase.from('boards').insert([
-      { key: 'global', label: 'グローバル' },
-      { key: 'help', label: 'ヘルプ' }
-    ])
-  }
+function showBoards(){
+  document.getElementById('board-list').style.display='block';
+  document.getElementById('thread-list').style.display='none';
+  document.getElementById('post-list').style.display='none';
 }
+function showThreads(){
+  if(!currentBoard) return alert("板を選んでください");
+  document.getElementById('board-list').style.display='none';
+  document.getElementById('thread-list').style.display='block';
+  document.getElementById('post-list').style.display='none';
+}
+function showPosts(){
+  document.getElementById('board-list').style.display='none';
+  document.getElementById('thread-list').style.display='none';
+  document.getElementById('post-list').style.display='block';
+}
+function scrollToBottom(){ window.scrollTo(0, document.body.scrollHeight); }
+
+// 板読み込み
 async function loadBoards(){
-  const { data } = await supabase.from('boards').select().order('id')
-  const html = (data||[]).map(b => `<option value="${b.key}">${b.label}</option>`).join('')
-  $('boardSelect').innerHTML = html
-  $('threadBoard').innerHTML = html
+  const { data } = await supabase.from('boards').select('*');
+  const area = document.getElementById('board-list');
+  area.innerHTML = `<h3>板一覧</h3>` + data.map(b=>`
+    <div class='card' onclick="selectBoard('${b.id}')">
+      <b>${clean(b.name)}</b><br>${clean(b.description)}
+    </div>`).join('');
 }
 
-/* ---------- スレッド一覧読み込み（勢い順：last_post_at desc） ---------- */
+async function selectBoard(id){ currentBoard=id; loadThreads(); showThreads(); }
+
+// スレ一覧
 async function loadThreads(){
-  const boardKey = $('boardSelect').value || 'global'
-  const q = supabase
-    .from('threads')
-    .select('id,title,author,board,created_at,last_post_at,posts(count)')
-    .eq('board', boardKey)
-    .order('last_post_at', { ascending: false })
-
-  const { data, error } = await q
-  if (error) { console.error(error); return }
-
-  const container = $('threadsList')
-  container.innerHTML = ''
-  ;(data||[]).forEach(thread => {
-    const el = document.createElement('div'); el.className = 'thread'
-    const count = (thread.posts && thread.posts.length) ? thread.posts.length : 0
-    el.innerHTML = `
-      <div class="thread-header">
-        <div>
-          <div class="thread-title">${safe(thread.title)}</div>
-          <div class="meta">ID:${thread.id} ・ by ${safe(thread.author||'名無し')}</div>
-        </div>
-        <div class="thread-stats small-muted">
-          ${count}レス<br>${fmt(thread.last_post_at || thread.created_at)}
-        </div>
-      </div>
-    `
-    const a = document.createElement('a'); a.href='#'; a.textContent = '開く'; a.style.marginTop='8px'; a.className='small-muted'
-    a.addEventListener('click', e=>{
-      e.preventDefault(); openThread(thread.id)
-    })
-    el.appendChild(a)
-    container.appendChild(el)
-  })
+  const { data } = await supabase.from('threads').select('*').eq('board_id', currentBoard);
+  const area = document.getElementById('thread-list');
+  area.innerHTML = `<h3>スレ一覧</h3>` + data.map(t=>`
+    <div class='card' onclick="selectThread('${t.id}')">
+      <b>${clean(t.title)}</b><br>勢い: ${t.speed || 0}
+    </div>`).join('') + `
+    <div class='card'>
+      <h4>新規スレ作成</h4>
+      <form onsubmit="createThread(event)">
+        <input id="thread-title" placeholder="スレタイ" required>
+        <button>作成</button>
+      </form>
+    </div>`;
 }
 
-/* ---------- スレッド作成処理（画像は圧縮してStorageへ） ---------- */
-$('createThreadForm').addEventListener('submit', async e=>{
-  e.preventDefault()
-  const title = $('threadTitle').value.trim()
-  if (!title) { alert('タイトル必須'); return }
-  const author = $('threadAuthor').value.trim() || '名無し'
-  const body = $('threadBody').value.trim()
-  const board = $('threadBoard').value || $('boardSelect').value || 'global'
-  const files = $('threadImages').files || []
-
-  // 1) threads 作成
-  const { data: thread, error: tErr } = await supabase.from('threads')
-    .insert([{ title, author, board, last_post_at: new Date().toISOString() }])
-    .select().single()
-  if (tErr) { console.error(tErr); alert('スレ作成エラー'); return }
-
-  // 2) 初回本文を posts に入れる（あれば）
-  if (body){
-    await supabase.from('posts').insert([{ thread_id: thread.id, author, body }])
-  }
-
-  // 3) 画像があれば圧縮して upload -> images テーブル
-  for (const f of files){
-    try {
-      if (!isSafeFileType(f)) { console.warn('不許可形式:', f.type); continue }
-      const compressed = await compressImageFile(f)
-      if (!compressed) continue
-      if (compressed.size > MAX_FILE_BYTES){ console.warn('圧縮後も大きい:', compressed.size); /* skip or still upload */ }
-      const key = `thread_${thread.id}/${crypto.randomUUID()}.webp`
-      const up = await supabase.storage.from(BUCKET).upload(key, compressed, { cacheControl: '3600', upsert: false })
-      if (up.error) { console.error('アップロード失敗', up.error); continue }
-      const url = supabase.storage.from(BUCKET).getPublicUrl(key).publicUrl
-      await supabase.from('images').insert([{ thread_id: thread.id, name: key, url }])
-    } catch(err){ console.error(err) }
-  }
-
-  // reset form
-  $('threadTitle').value=''; $('threadAuthor').value=''; $('threadBody').value=''; $('threadImages').value=null
-  await loadThreads()
-})
-
-/* ---------- スレ個別表示 ---------- */
-async function openThread(threadId){
-  // fetch thread + posts + images
-  const { data: thread, error } = await supabase
-    .from('threads')
-    .select('*, posts(id,author,body,image_url,created_at), images(id,name,url,created_at)')
-    .eq('id', threadId)
-    .single()
-  if (error || !thread){ console.error(error); alert('読み込み失敗'); return }
-
-  // render
-  $('indexPage').style.display = 'none'
-  $('threadPage').style.display = 'block'
-  const v = $('threadView')
-  let html = `<div style="display:flex;justify-content:space-between;align-items:center">
-      <div><div style="font-weight:900;font-size:18px">${safe(thread.title)}</div>
-      <div class="small-muted">ID:${thread.id} ・ by ${safe(thread.author||'名無し')} ・ ${thread.board}</div></div>
-      <div class="thread-stats">${fmt(thread.last_post_at || thread.created_at)}</div>
-    </div>`
-
-  // posts (numbered)
-  const posts = (thread.posts || []).sort((a,b)=> new Date(a.created_at) - new Date(b.created_at))
-  if (posts.length === 0 && thread.images?.length) {
-    html += `<div class="small-muted" style="margin-top:8px">本文は無し、画像のみのスレです。</div>`
-  }
-  posts.forEach((p, idx) => {
-    html += `<div class="post"><div class="meta">No.${idx+1} ・ ID:${p.id} ・ ${fmt(p.created_at)} ・ <b>${safe(p.author||'名無し')}</b></div>
-              <div>${safe(p.body||'')}</div>`
-    if (p.image_url) {
-      html += `<div class="images"><img src="${p.image_url}" alt="img"></div>`
-    }
-    html += `</div>`
-  })
-
-  // thread images (top-level)
-  if (thread.images && thread.images.length){
-    html += `<div class="images" style="margin-top:10px">`
-    thread.images.forEach(im => html += `<img src="${im.url}" alt="img">`)
-    html += `</div>`
-  }
-
-  v.innerHTML = html
-
-  // store current thread id for post submission
-  window.currentThreadId = threadId
-
-  // auto-scroll to bottom (最新のレス)
-  setTimeout(()=> window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }), 150)
+async function createThread(e){
+  e.preventDefault();
+  const title = document.getElementById('thread-title').value;
+  await supabase.from('threads').insert({ title, board_id: currentBoard });
+  loadThreads();
 }
 
-/* ---------- レス投稿（画像含む） ---------- */
-$('createPostForm').addEventListener('submit', async e=>{
-  e.preventDefault()
-  const author = $('postAuthor').value.trim() || '名無し'
-  const body = $('postBody').value.trim()
-  if (!body) { alert('本文を入力してください'); return }
-  const file = $('postImage').files[0]
-  const threadId = window.currentThreadId
-  let image_url = null
+async function selectThread(id){ currentThread=id; loadPosts(); showPosts(); }
 
-  // 画像があれば圧縮してアップ
-  if (file){
-    if (!isSafeFileType(file)) { alert('許可されていない画像形式です'); return }
-    try {
-      const blob = await compressImageFile(file, 900, 0.6) // レスは小さめに
-      const key = `thread_${threadId}/post_${crypto.randomUUID()}.webp`
-      const { error: upErr } = await supabase.storage.from(BUCKET).upload(key, blob, { cacheControl:'3600' })
-      if (upErr) { console.error(upErr); alert('画像アップロード失敗'); }
-      else image_url = supabase.storage.from(BUCKET).getPublicUrl(key).publicUrl
-    } catch(err){ console.error(err); alert('画像処理失敗') }
-  }
-
-  // insert post
-  const { error: pErr } = await supabase.from('posts').insert([{ thread_id: threadId, author, body, image_url }])
-  if (pErr){ console.error(pErr); alert('レス投稿失敗'); return }
-
-  // update thread last_post_at（フロート順維持）
-  await supabase.from('threads').update({ last_post_at: new Date().toISOString() }).eq('id', threadId)
-
-  // reset and refresh view + scroll to new
-  $('postBody').value = ''; $('postImage').value = null
-  await openThread(threadId)
-})
-
-/* ---------- 板追加（簡易UI） ---------- */
-$('addBoardBtn').addEventListener('click', async ()=>{
-  const name = $('newBoardName').value.trim()
-  if (!name) return alert('板名を入力してください')
-  const key = name.toLowerCase().replace(/\s+/g,'_').replace(/[^\w\-]/g,'')
-  const { error } = await supabase.from('boards').insert([{ key, label: name }])
-  if (error){ console.error(error); alert('板追加失敗') }
-  else { $('newBoardName').value=''; await loadBoards(); }
-})
-
-/* ---------- ナビゲーション ---------- */
-$('backToIndex').addEventListener('click', e=>{
-  e.preventDefault()
-  $('threadPage').style.display = 'none'
-  $('indexPage').style.display = 'block'
-  loadThreads()
-})
-$('backBtn').addEventListener('click', ()=>{ $('backToIndex').click() })
-$('refreshBtn').addEventListener('click', loadThreads)
-$('clearForm').addEventListener('click', ()=>{
-  $('threadTitle').value=''; $('threadAuthor').value=''; $('threadBody').value=''; $('threadImages').value=null
-})
-
-/* ---------- 初期化 ---------- */
-;(async ()=>{
-  try {
-    await ensureAndLoad()
-  } catch(err){ console.error(err) }
-})()
-
-async function ensureAndLoad(){
-  await ensureDefaultBoards()
-  await loadBoards()
-  await loadThreads()
+// 画像圧縮
+function compressImage(file){
+  return new Promise(res=>{
+    const img = new Image();
+    const reader = new FileReader();
+    reader.onload = e => { img.src=e.target.result; };
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const max = 900;
+      let w = img.width, h = img.height;
+      if(w>max){ h *= max/w; w=max; }
+      canvas.width=w; canvas.height=h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img,0,0,w,h);
+      res(canvas.toDataURL('image/jpeg',0.65));
+    };
+    reader.readAsDataURL(file);
+  });
 }
+
+// 投稿読み込み
+async function loadPosts(){
+  const { data } = await supabase.from('posts').select('*').eq('thread_id', currentThread).order('created_at');
+  const area = document.getElementById('post-list');
+  area.innerHTML = `<h3>レス一覧</h3>` + data.map((p,i)=>`
+    <div class='card'>
+      <b>${i+1} 名前：${clean(p.author)} [ID:${p.uid_hash}]</b><br>
+      ${clean(p.body)}
+      ${p.image_url ? `<img class='post-img' src="${p.image_url}">` : ''}
+    </div>`).join('') + `
+    <div class='card'>
+      <h4>レス投稿</h4>
+      <form onsubmit="createPost(event)">
+        <input id="post-author" placeholder="名前">
+        <textarea id="post-body" placeholder="本文" required></textarea>
+        <input type="file" id="post-image" accept="image/*">
+        <button>投稿</button>
+      </form>
+    </div>`;
+  scrollToBottom();
+}
+
+// レス投稿
+async function createPost(e){
+  e.preventDefault();
+  const author = document.getElementById('post-author').value || '名無し';
+  const body = document.getElementById('post-body').value;
+  const file = document.getElementById('post-image').files[0];
+  let image_url = null;
+  if(file){ image_url = await compressImage(file); }
+  await supabase.from('posts').insert({ author, body, thread_id: currentThread, image_url });
+  loadPosts();
+}
+
+loadBoards();
 </script>
 </body>
 </html>
