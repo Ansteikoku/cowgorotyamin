@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>グロチャ民の掲示板</title>
+<title>グロチャ民の掲示板（板一覧付き 完全版）</title>
 <link rel="stylesheet" href="" />
 <style>
   :root{
@@ -32,6 +32,9 @@
   .images{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
   .images img{max-width:140px;border-radius:6px;border:2px solid #052e09;object-fit:cover}
   .small{font-size:13px;color:var(--muted)}
+  .boards-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
+  .board-card{padding:12px;border-radius:8px;background:#032203;border:1px solid #05410a;cursor:pointer}
+  .board-card h4{margin:0 0 6px 0;color:var(--accent)}
   /* mobile tabbar */
   .tabbar{position:fixed;left:0;right:0;bottom:0;height:60px;background:#123012;border-top:2px solid #072007;display:flex;z-index:999}
   .tabbar button{flex:1;background:none;border:none;color:#c8f7c5;font-size:14px}
@@ -49,11 +52,11 @@
   <div class="wrap" id="index-page">
     <header>
       <div class="logo">グロチャ民の掲示板</div>
-      <select id="boards" class="boards-select"></select>
+      <select id="board" class="board-select"></select>
     </header>
 
     <div class="grid">
-      <!-- Sidebar: 新規スレッド作成 -->
+      <!-- Sidebar: 新規スレッド作成 & 板作成 -->
       <aside class="card">
         <h3>スレッド作成</h3>
         <form id="create-thread" novalidate>
@@ -70,8 +73,23 @@
           <button class="btn" type="submit" style="margin-top:8px">スレッド作成</button>
         </form>
 
+        <hr style="border:none;border-top:1px solid #07360b;margin:12px 0">
+
+        <h3>板（カテゴリ）管理</h3>
+        <div id="boards-area" class="boards-grid" style="margin-bottom:10px"></div>
+
+        <form id="create-board" novalidate>
+          <label class="small">板キー（英数字）</label>
+          <input id="board-key" type="text" placeholder="例: general" required />
+          <label class="small">表示名</label>
+          <input id="board-label" type="text" placeholder="例: 雑談" required />
+          <label class="small">説明（任意）</label>
+          <textarea id="board-desc" placeholder="この板の説明"></textarea>
+          <button class="btn" type="submit" style="margin-top:8px">板を追加</button>
+        </form>
+
         <button id="refresh" class="btn secondary" style="margin-top:10px;width:100%">更新</button>
-        <div class="small" style="margin-top:10px">。</div>
+        <div class="small" style="margin-top:10px">板の追加は DB に保存されます。公開前は RLS と認証設定を必ず入れてください。</div>
       </aside>
 
       <!-- Main: スレッド一覧 -->
@@ -115,13 +133,12 @@
   /***************************************************************************
    * 設定（デプロイ前に必ず置き換える）
    ***************************************************************************/
-  const SUPABASE_URL = "https://spjepboucvocedgoxzwg.supabase.co"; // ← 置き換え
-  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNwamVwYm91Y3ZvY2VkZ294endnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM5OTMwMDEsImV4cCI6MjA3OTU2OTAwMX0.nmDF_BRiaXxTV2ij2ak4Fg24iCfHkvAbL7zNDbKCKWU"; // ← 置き換え（公開キー）
-  const IMAGE_BUCKET = "thread-images"; // ← Supabase Storage の bucket 名
+  const SUPABASE_URL = "https://spjepboucvocedgoxzwg.supabase.co"; // ← ここを置き換え
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNwamVwYm91Y3ZvY2VkZ294endnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM5OTMwMDEsImV4cCI6MjA3OTU2OTAwMX0.nmDF_BRiaXxTV2ij2ak4Fg24iCfHkvAbL7zNDbKCKWU";                // ← ここを置き換え（公開 anon key）
+  const IMAGE_BUCKET = "thread-images";                     // ← Supabase Storage の bucket 名
   /***************************************************************************/
 
   const supabase = supabaseJs.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
   const $ = id => document.getElementById(id);
 
   // --- セーフティ設定 ---
@@ -167,21 +184,53 @@
     });
   }
 
-  // --- Boards 初期 / 読み込み ---
+  // ---------------- Boards （表示 & 追加） ----------------
   async function addDefaultBoards(){
     const { data } = await supabase.from('boards').select('*');
     if(!data || data.length === 0){
-      await supabase.from('boards').insert([{key:'global',label:'グローバル',description:'みんなの板'},{key:'help',label:'ヘルプ',description:'使い方'}]);
+      await supabase.from('boards').insert([
+        { key:'global', label:'グローバル', description:'みんなの板' },
+        { key:'help',   label:'ヘルプ',   description:'使い方' }
+      ]);
     }
   }
+
+  // load boards into both select & board-list UI
   async function loadBoards(){
     const { data } = await supabase.from('boards').select('*').order('id');
     if(!data) return;
+    // select element for choosing board
     $('board').innerHTML = data.map(b => `<option value="${escapeHtml(b.key)}">${escapeHtml(b.label)}</option>`).join('');
     $('thread-board').innerHTML = $('board').innerHTML;
+    // visual boards area
+    const boardsArea = $('boards-area'); boardsArea.innerHTML = '';
+    for(const b of data){
+      const d = document.createElement('div'); d.className = 'board-card';
+      d.innerHTML = `<h4>${escapeHtml(b.label)}</h4><div class="small">${escapeHtml(b.description||'')}</div>`;
+      d.addEventListener('click', ()=> {
+        $('board').value = b.key;
+        loadThreads();
+      });
+      boardsArea.appendChild(d);
+    }
   }
 
-  // --- スレ一覧（勢い＝posts count） ---
+  // create board from form
+  $('create-board')?.addEventListener('submit', async e=>{
+    e.preventDefault();
+    const key = $('board-key').value.trim();
+    const label = $('board-label').value.trim();
+    const desc = $('board-desc').value.trim();
+    if(!key || !label) return alert('板キーと表示名は必須です');
+    // minimal key validation
+    if(!/^[a-z0-9_-]+$/.test(key)) return alert('板キーは英小文字・数字・-_ のみを使ってください');
+    const { error } = await supabase.from('boards').insert([{ key, label, description: desc }]);
+    if(error){ console.error(error); alert('板追加失敗'); return; }
+    $('board-key').value=''; $('board-label').value=''; $('board-desc').value='';
+    loadBoards();
+  });
+
+  // ---------------- Threads (一覧) ----------------
   async function loadThreads(){
     const board = $('board').value;
     const { data } = await supabase
@@ -201,7 +250,7 @@
     }
     // append "create thread" card at bottom
     const createCard = document.createElement('div'); createCard.className='card';
-    createCard.innerHTML = `<h4>新規スレ作成</h4>
+    createCard.innerHTML = `<h4>新規スレ作成（簡易）</h4>
       <input id="tmp-thread-title" placeholder="スレタイ">
       <textarea id="tmp-thread-body" placeholder="最初のレス（任意）"></textarea>
       <input id="tmp-thread-images" type="file" accept="image/*" multiple style="margin-top:6px">
@@ -209,7 +258,6 @@
     container.appendChild(createCard);
   }
 
-  // mini create used in threads list to avoid switching sidebar
   async function createThreadFromMini(){
     const title = $('tmp-thread-title').value.trim();
     const body = $('tmp-thread-body').value.trim();
@@ -217,7 +265,7 @@
     if(Date.now() - lastPostTs < POST_MIN_INTERVAL) return alert('連投規制：少し待ってください');
     for(const w of NG_WORDS) if((body||'').includes(w)) return alert('禁止ワードがあります');
     const board = $('board').value;
-    const author = 'system'; // or take from form
+    const author = '名無し';
     const { data: thread, error } = await supabase.from('threads').insert([{title,author,board,last_post_at:new Date().toISOString()}]).select().single();
     if(error){ console.error(error); alert('スレ作成失敗'); return; }
     if(body) await supabase.from('posts').insert([{thread_id:thread.id,author,body}]);
@@ -264,7 +312,7 @@
     loadThreads();
   });
 
-  // open specific thread (個別ページ)
+  // ---------------- Thread page ----------------
   async function openThread(id){
     const { data: thread } = await supabase.from('threads').select('*, posts(*), images(*)').eq('id', id).single();
     if(!thread) return alert('スレが見つかりません');
@@ -290,7 +338,7 @@
     setTimeout(()=> window.scrollTo({top: document.body.scrollHeight, behavior:'smooth'}), 80);
   }
 
-  // 投稿（レス）処理（画像可）
+  // ---------------- Posts submit ----------------
   $('create-post')?.addEventListener('submit', async (e)=>{
     e.preventDefault();
     const body = $('post-body').value.trim(); if(!body) return alert('本文を入力してください');
